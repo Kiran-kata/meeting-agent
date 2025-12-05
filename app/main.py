@@ -1,0 +1,62 @@
+import sys
+import logging
+
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
+
+from .overlay import Overlay
+from .agent import MeetingAgentCore
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('logs/meeting_agent.log', mode='a')
+    ]
+)
+
+
+# Adjust these indices once after checking sounddevice.query_devices()
+MEETING_DEVICE_INDEX = 9   # Microphone Array (Windows DirectSound) - fallback for meeting
+MIC_DEVICE_INDEX = 2       # Microphone (OMEN Cam & Voice)
+
+
+def main():
+    app = QApplication(sys.argv)
+
+    overlay = Overlay()
+    overlay.show_message("Starting meeting agent...")
+
+    agent = MeetingAgentCore(
+        overlay_widget=overlay,
+        meeting_device_index=MEETING_DEVICE_INDEX,
+        mic_device_index=MIC_DEVICE_INDEX,
+    )
+
+    def start_agent():
+        agent.start()
+        overlay.show_message(
+            "Meeting agent running.\n\n"
+            "- Listening to meeting audio (for questions)\n"
+            "- Listening to your mic (ignored for Q&A)\n"
+            "- Scanning screen & PDFs\n"
+            "Close this window to stop and generate summary."
+        )
+
+    QTimer.singleShot(1500, start_agent)
+
+    def on_about_to_quit():
+        agent.stop()
+        summary_path = agent.generate_summary_and_save()
+        print(f"Meeting summary saved to: {summary_path}")
+
+    app.aboutToQuit.connect(on_about_to_quit)
+
+    overlay.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

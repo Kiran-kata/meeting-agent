@@ -1,0 +1,12 @@
+openai
+python-dotenv
+pyqt6
+mss
+Pillow
+pytesseract
+pygetwindow
+PyPDF2
+faiss-cpu
+sounddevice
+numpy
+requests
