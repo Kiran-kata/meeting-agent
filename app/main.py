@@ -19,7 +19,7 @@ logging.basicConfig(
 
 
 # Adjust these indices once after checking sounddevice.query_devices()
-MEETING_DEVICE_INDEX = 9   # Microphone Array (Windows DirectSound) - fallback for meeting
+MEETING_DEVICE_INDEX = 24  # Stereo Mix (Realtek HD Audio Stereo input) - captures system audio
 MIC_DEVICE_INDEX = 2       # Microphone (OMEN Cam & Voice)
 
 
