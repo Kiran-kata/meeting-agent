@@ -11,3 +11,5 @@ sounddevice
 numpy
 requests
 pydub
+pyttsx3
+scipy
