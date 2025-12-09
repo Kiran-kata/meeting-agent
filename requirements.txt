@@ -1,4 +1,4 @@
-openai
+google-generativeai
 python-dotenv
 pyqt6
 mss
@@ -10,3 +10,4 @@ faiss-cpu
 sounddevice
 numpy
 requests
+pydub

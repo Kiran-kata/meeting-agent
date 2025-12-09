@@ -1,13 +1,13 @@
 # Meeting Agent 🤖
 
-An intelligent AI-powered meeting assistant that captures real-time audio, detects questions, extracts screen content, and generates comprehensive meeting summaries.
+An intelligent AI-powered meeting assistant that captures real-time audio, detects questions, extracts screen content, and generates comprehensive meeting summaries using **Google Gemini API**.
 
 ## Features ✨
 
 - **Real-time Audio Capture** - Listen to both meeting audio and your microphone
-- **Smart Transcription** - Use OpenAI's Whisper for accurate speech-to-text
+- **Smart Transcription** - Use Gemini's audio-to-text for accurate speech recognition
 - **Intelligent Q&A** - Automatically detect questions and get AI-powered answers
-- **Screen Analysis** - Capture and OCR text from your screen
+- **Screen Analysis** - Capture and OCR text from your screen with Gemini vision
 - **PDF Search** - Index and search through reference documents
 - **Meeting Summaries** - Generate structured summaries with action items
 - **Always-on-Top Overlay** - Draggable, transparent overlay window to see behind it
@@ -18,7 +18,7 @@ An intelligent AI-powered meeting assistant that captures real-time audio, detec
 ### 1. Prerequisites
 
 - Python 3.8+
-- OpenAI API key (get one at https://platform.openai.com)
+- Google Gemini API key (get one at https://aistudio.google.com/app/apikey)
 - Tesseract OCR (optional, for screen text extraction)
 
 ### 2. Setup Virtual Environment
@@ -35,12 +35,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 4. Configure OpenAI API Key
+### 4. Configure Gemini API Key
 
-1. Get your API key from: https://platform.openai.com/account/api-keys
+1. Get your API key from: https://aistudio.google.com/app/apikey
 2. Edit `.env` file:
    ```
-   OPENAI_API_KEY=sk-your-actual-key-here
+   GEMINI_API_KEY=your-actual-key-here
    TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
    ```
 3. Save the file
@@ -77,14 +77,14 @@ meeting-agent/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                 # Application entry point
-│   ├── config.py               # Configuration & API keys
+│   ├── config.py               # Configuration & Gemini API setup
 │   ├── overlay.py              # PyQt6 UI overlay (draggable & transparent)
 │   ├── agent.py                # Core meeting agent logic
-│   ├── llm_client.py           # OpenAI API integration
+│   ├── llm_client.py           # Gemini API integration
 │   ├── audio_meeting.py        # Meeting audio capture
 │   ├── audio_mic.py            # Microphone audio capture
 │   ├── screen_capture.py       # Screen capture & OCR
-│   ├── question_detector.py    # Question detection
+│   ├── question_detector.py    # Question detection with Gemini
 │   ├── context_manager.py      # Meeting context tracking
 │   ├── pdf_index.py            # PDF indexing & search
 │   └── ...
@@ -92,7 +92,7 @@ meeting-agent/
 ├── logs/                       # Application logs
 ├── meeting_summaries/          # Generated summaries
 ├── .env                        # API keys (create this)
-├── requirements.txt            # Python dependencies
+├── requirements.txt            # Python dependencies (uses google-generativeai)
 └── README.md                   # This file
 ```
 
@@ -157,9 +157,9 @@ MIC_DEVICE_INDEX = 1        # Microphone
 
 ## Troubleshooting 🔧
 
-### "OPENAI_API_KEY NOT CONFIGURED"
+### "GEMINI_API_KEY NOT CONFIGURED"
 - Check your `.env` file has the API key
-- Key should start with `sk-`
+- Get a free key from: https://aistudio.google.com/app/apikey
 - Restart the application after updating `.env`
 
 ### No Audio Being Captured
@@ -171,9 +171,10 @@ MIC_DEVICE_INDEX = 1        # Microphone
 - Install: https://github.com/UB-Mannheim/tesseract/wiki
 - Or update `TESSERACT_PATH` in `.env` if installed elsewhere
 
-### "FFmpeg warning" (non-critical)
-- This doesn't affect functionality
-- Install if needed: `pip install ffmpeg-python`
+### Gemini API Rate Limiting
+- Free tier has rate limits (~15 requests per minute)
+- For production use, consider upgrading to paid tier
+- Check usage: https://aistudio.google.com/app/apikey
 
 ### Audio Quality Issues
 - Check your microphone and meeting audio device are enabled
@@ -193,13 +194,14 @@ Edit `app/config.py` to customize:
 SAMPLE_RATE = 16000         # Audio sample rate
 CHANNELS = 1                # Mono audio
 CHUNK_DURATION_SECONDS = 8  # Chunk size for transcription
+GEMINI_MODEL = "gemini-1.5-flash"  # Fast model for real-time use
 ```
 
 ## Dependencies
 
 | Package | Purpose |
 |---------|---------|
-| `openai` | GPT-4o and Whisper API access |
+| `google-generativeai` | Gemini API access (text, vision, audio) |
 | `pyqt6` | Modern overlay UI |
 | `sounddevice` | Audio capture |
 | `mss` | Screen capture |
@@ -208,6 +210,7 @@ CHUNK_DURATION_SECONDS = 8  # Chunk size for transcription
 | `PyPDF2` | PDF parsing |
 | `faiss-cpu` | Vector search for PDFs |
 | `numpy` | Audio processing |
+| `pillow` | Image processing |
 
 ## Tips & Best Practices 💡
 
@@ -216,6 +219,7 @@ CHUNK_DURATION_SECONDS = 8  # Chunk size for transcription
 3. **Monitor Logs** - Check `logs/meeting_agent.log` for detailed debug info
 4. **Save Summaries** - Meeting summaries are automatically saved for future reference
 5. **Device Testing** - Test your audio devices before important meetings
+6. **Free Tier Usage** - The free Gemini API is great for testing; upgrade for production
 
 ## License
 
@@ -225,10 +229,10 @@ MIT License - Feel free to use and modify
 
 For issues or questions:
 1. Check the logs: `logs/meeting_agent.log`
-2. Verify API key is valid
+2. Verify API key is valid at: https://aistudio.google.com/app/apikey
 3. Test audio devices separately
 4. Check that all dependencies are installed
 
 ---
 
-**Made with ❤️ for better meetings**
+**Made with ❤️ for better meetings - Now powered by Google Gemini**

@@ -1,7 +1,7 @@
-from groq import Groq
-from .config import GROQ_API_KEY, GROQ_MODEL
+import google.generativeai as genai
+from .config import GEMINI_API_KEY, GEMINI_MODEL
 
-client = Groq(api_key=GROQ_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
 QUESTION_CUES = [
     "what is", "what are", "how do", "how does", "how to",
@@ -18,19 +18,14 @@ def _is_question_heuristic(text: str) -> bool:
 
 
 def _is_question_llm(text: str) -> bool:
-    prompt = f"""
-Text: {text}
+    model = genai.GenerativeModel(GEMINI_MODEL)
+    prompt = f"""Text: {text}
 
 Is this text someone in a meeting asking a question that expects an explanation or answer?
-Reply with just YES or NO.
-""".strip()
+Reply with just YES or NO."""
 
-    resp = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-    )
-    ans = resp.choices[0].message.content.strip().upper()
+    resp = model.generate_content(prompt)
+    ans = resp.text.strip().upper()
     return ans.startswith("Y")
 
 
