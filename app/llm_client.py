@@ -6,7 +6,7 @@ import logging
 import base64
 from io import BytesIO
 import google.generativeai as genai
-from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_VISION_MODEL
+from .config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_VISION_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +117,27 @@ def summarize_meeting(transcript: str, qa_pairs: list = None) -> str:
     Returns:
         Meeting summary
     """
+    # If no transcript, return a default message
+    if not transcript or transcript.strip() == "":
+        default_summary = """
+MEETING SUMMARY
+===============
+
+No audio was captured during this meeting.
+
+Possible reasons:
+- Microphone/meeting audio device not properly configured
+- Gemini API quota exceeded
+- No audio was actually present during the meeting
+
+To troubleshoot:
+1. Check audio device indices (run: python -c "import sounddevice as sd; print(sd.query_devices())")
+2. Update MEETING_DEVICE_INDEX and MIC_DEVICE_INDEX in config.py
+3. Check Gemini API quota at: https://ai.dev/usage?tab=rate-limit
+4. Ensure audio is being captured from the correct device
+"""
+        return default_summary
+    
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
@@ -145,18 +166,31 @@ Format the summary clearly with headers and bullet points."""
         return summary
     except Exception as e:
         logger.error(f"Error summarizing meeting: {e}")
-        return "Could not generate summary."
+        # Return fallback summary with what we have
+        fallback = f"""
+MEETING SUMMARY (Auto-generated)
+================================
+
+TRANSCRIPT:
+{transcript}
+{qa_text if qa_pairs else ''}
+
+NOTE: Could not generate AI summary due to API limitations.
+Please review the raw transcript above.
+"""
+        return fallback
 
 
 def transcribe_audio_bytes(wav_bytes: bytes) -> str:
     """
     Transcribe audio using Gemini's audio transcription capability.
+    Falls back to silence detection if API is unavailable.
     
     Args:
         wav_bytes: Audio data in WAV format
     
     Returns:
-        Transcribed text
+        Transcribed text or empty string if silent
     """
     try:
         # Use Gemini's audio transcription
@@ -183,6 +217,22 @@ def transcribe_audio_bytes(wav_bytes: bytes) -> str:
         return text
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
+        # Fallback: Check if audio has significant volume (not silence)
+        try:
+            import numpy as np
+            from scipy import signal
+            
+            # Convert bytes back to audio for analysis
+            import soundfile as sf
+            from io import BytesIO
+            
+            audio, sr = sf.read(BytesIO(wav_bytes))
+            # If RMS > 0.01, there's audio; otherwise it's silent
+            rms = np.sqrt(np.mean(audio ** 2))
+            if rms > 0.01:
+                return "[Audio detected but transcription unavailable]"
+        except:
+            pass
         return ""
 
 

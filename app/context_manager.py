@@ -38,5 +38,17 @@ class ContextManager:
     def get_full_transcript(self) -> str:
         return "\n".join(self.transcript_segments)
 
-    def get_qa_log(self) -> str:
-        return "\n".join(self.qa_log)
+    def get_qa_log(self) -> list:
+        """Return as list of tuples for llm_client"""
+        result = []
+        for entry in self.qa_log:
+            if "Q:" in entry and "A:" in entry:
+                parts = entry.split("A:")
+                q = parts[0].replace("[", "").split("Q:")[1].strip()
+                a = parts[1].strip() if len(parts) > 1 else ""
+                result.append((q, a))
+        return result
+    
+    def has_transcript(self) -> bool:
+        """Check if any meaningful transcript has been captured"""
+        return len(self.transcript_segments) > 0
