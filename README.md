@@ -7,11 +7,13 @@ An intelligent AI-powered meeting assistant that captures real-time audio, detec
 - **Real-time Audio Capture** - Listen to both meeting audio and your microphone
 - **Smart Transcription** - Use Gemini's audio-to-text for accurate speech recognition
 - **Intelligent Q&A** - Automatically detect questions and get AI-powered answers
+- **PDF Document Analysis** - Upload PDFs and analyze them during meetings ⭐ NEW
 - **Screen Analysis** - Capture and OCR text from your screen with Gemini vision
 - **PDF Search** - Index and search through reference documents
+- **Audio Narration** - Get spoken answers using Windows text-to-speech ⭐ NEW
 - **Meeting Summaries** - Generate structured summaries with action items
 - **Always-on-Top Overlay** - Draggable, transparent overlay window to see behind it
-- **Apple-Inspired UI** - Modern, sleek dark theme design
+- **Apple-Inspired UI** - Modern, sleek dark theme design with PDF upload button
 
 ## Quick Start 🚀
 
@@ -66,9 +68,77 @@ MIC_DEVICE_INDEX = 2        # Your microphone
 ```
 
 You should see a dark overlay window appear in the top-left corner with:
-- 🟢 Active status indicator
-- Audio transcription logs in the terminal
-- Real-time meeting insights
+- 📄 **Add PDF** button (blue) - Upload documents before meeting
+- 🟢 **Start** button (green) - Begin recording
+- 🔴 **Stop** button (red) - End recording and generate summary
+- 📊 Status indicator showing Recording/Stopped
+
+## Usage Guide
+
+### Basic Meeting Flow
+
+1. **Prepare with PDFs** (Optional):
+   - Click "📄 Add PDF" button
+   - Select any PDF documents you want analyzed
+   - Agent will search these documents when answering questions
+
+2. **Start Recording**:
+   - Click "▶ Start" button
+   - Agent begins listening to meeting audio and screen
+
+3. **During Meeting**:
+   - Agent detects questions automatically
+   - Combines context from:
+     - Meeting transcript
+     - Your uploaded PDFs
+     - Current screen content
+   - Answers are **spoken aloud** + displayed
+   - Q&A is logged for summary
+
+4. **End Meeting**:
+   - Click "⏹ Stop" button
+   - Meeting summary is generated
+   - Summary saved to `meeting_summaries/summary_*.txt`
+
+### PDF Features
+
+**Add PDFs Before Meeting:**
+```
+1. Click "📄 Add PDF" button
+2. Select a PDF file
+3. File is indexed for question answering
+4. Can add multiple PDFs
+5. Start meeting when ready
+```
+
+**During Meeting:**
+- Questions automatically search uploaded PDFs
+- Relevant PDF content is included in answers
+- Answers cite PDF sections
+- Voice narration speaks all answers
+
+**After Meeting:**
+- Summary includes PDF-sourced Q&A
+- Can add more PDFs and start a new meeting
+
+### Example: Policy Discussion Meeting
+
+```
+1. Click "📄 Add PDF" → Load "company-policies.pdf"
+2. Click "📄 Add PDF" → Load "employee-handbook.pdf"
+3. Click "▶ Start"
+
+During Meeting:
+- Q: "What's our vacation policy?"
+- Agent searches PDFs → Finds policy section
+- Answer combines PDF content + meeting context
+- Answer is SPOKEN aloud
+
+4. Click "⏹ Stop"
+   - Summary includes all policy Q&A
+   - PDF content included in summary
+   - Saved to meeting_summaries/
+```
 
 ## Project Structure
 
