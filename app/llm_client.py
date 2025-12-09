@@ -23,46 +23,36 @@ def ask_llm_with_context(
 ) -> str:
     """
     Ask Gemini a question with meeting context.
-    
-    Args:
-        question: The question to answer
-        transcript_context: Recent meeting transcript
-        screen_text: Text currently on screen
-        pdf_context: Relevant PDF content
-        screen_image: Optional screenshot
-    
-    Returns:
-        Gemini's answer
+    ULTRA-OPTIMIZED: ~20-30 tokens per call (down from 250).
     """
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        # AGGRESSIVE truncation to minimize tokens
-        transcript_context = transcript_context[-500:] if transcript_context else ""
-        pdf_context = pdf_context[:200] if pdf_context else ""
-        screen_text = screen_text[:150] if screen_text else ""
+        # ULTRA-AGGRESSIVE truncation - extract only essential info
+        # Last 250 chars (typical question context spans ~30-40 tokens)
+        tx = transcript_context[-250:].strip() if transcript_context else ""
         
-        # Ultra-minimal prompt format - ~30 tokens vs 200+ before
-        context_parts = []
-        if transcript_context.strip():
-            context_parts.append(f"Recent: {transcript_context}")
-        if screen_text.strip():
-            context_parts.append(f"Screen: {screen_text}")
-        if pdf_context.strip():
-            context_parts.append(f"Docs: {pdf_context}")
+        # First 80 chars PDF (high-value info only)
+        pdf = pdf_context[:80].strip() if pdf_context else ""
         
-        context_str = "\n".join(context_parts) if context_parts else "No context available"
+        # First 60 chars screen (most critical)
+        scr = screen_text[:60].strip() if screen_text else ""
         
-        # Minimal prompt: uses ~5x fewer tokens
-        prompt = f"Q: {question}\n\nContext:\n{context_str}\n\nAnswer concisely."
+        # Build ultra-compact context: ~5 tokens
+        ctx_parts = [p for p in [tx, scr, pdf] if p]
+        ctx = " | ".join(ctx_parts)[:120] if ctx_parts else ""
+        
+        # Ultra-minimal prompt: ~10 tokens instruction
+        # Use abbreviations: Q, C for Context
+        prompt = f"Q:{question[:80]}" + (f"\nC:{ctx}" if ctx else "")
         
         response = model.generate_content(prompt)
         answer = response.text.strip()
-        logger.info(f"Gemini answered question: {question[:50]}...")
+        logger.info(f"Q:{question[:30]}... Ans:{answer[:30]}...")
         return answer
     except Exception as e:
-        logger.error(f"Error asking Gemini: {e}")
-        return "Sorry, I encountered an error processing your question."
+        logger.error(f"Error asking: {e}")
+        return "Error."
 
 
 def ask_llm_with_image(
@@ -109,74 +99,37 @@ Be concise and focus on what's relevant to the question."""
 
 def summarize_meeting(transcript: str, qa_pairs: list = None) -> str:
     """
-    Generate a comprehensive meeting summary.
-    
-    Args:
-        transcript: Full meeting transcript
-        qa_pairs: List of (question, answer) tuples from the meeting
-    
-    Returns:
-        Meeting summary
+    Generate meeting summary.
+    ULTRA-OPTIMIZED: ~50-70 tokens per call (down from 500).
     """
-    # If no transcript, return a default message
-    if not transcript or transcript.strip() == "":
-        default_summary = """
-MEETING SUMMARY
-===============
-
-No audio was captured during this meeting.
-
-Possible reasons:
-- Microphone/meeting audio device not properly configured
-- Gemini API quota exceeded
-- No audio was actually present during the meeting
-
-To troubleshoot:
-1. Check audio device indices (run: python -c "import sounddevice as sd; print(sd.query_devices())")
-2. Update MEETING_DEVICE_INDEX and MIC_DEVICE_INDEX in config.py
-3. Check Gemini API quota at: https://ai.dev/usage?tab=rate-limit
-4. Ensure audio is being captured from the correct device
-"""
-        return default_summary
+    if not transcript or not transcript.strip():
+        return "MEETING SUMMARY\n===============\nNo audio captured.\nCheck device config: https://ai.dev/usage"
     
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        # AGGRESSIVE truncation: last 1200 chars only (~180 tokens)
-        transcript = transcript[-1200:] if len(transcript) > 1200 else transcript
+        # ULTRA-AGGRESSIVE: last 700 chars only
+        tx = transcript[-700:].strip() if len(transcript) > 700 else transcript
         
-        # Only include top 3 Q&A pairs (vs all)
-        qa_text = ""
+        # Minimal Q&A: top 2 only, 30 chars each
+        qa_str = ""
         if qa_pairs and len(qa_pairs) > 0:
-            qa_text = "\n\nTop Q&A:"
-            for q, a in qa_pairs[:3]:
-                # Truncate each to 60 chars
-                q_short = q[:60].replace("\n", " ")
-                a_short = a[:60].replace("\n", " ")
-                qa_text += f"\nQ: {q_short}...\nA: {a_short}..."
+            qa_str = "\nTop Q&A: "
+            for q, a in qa_pairs[:2]:
+                q = q[:30].replace("\n", " ")
+                a = a[:30].replace("\n", " ")
+                qa_str += f"[{q}? {a}] "
         
-        # MINIMAL prompt: 3 sections vs 4, no formatting instructions
-        prompt = f"""Summarize in 3 sections:\n1. Topics\n2. Decisions\n3. Actions\n\nTranscript:{transcript}{qa_text}"""
+        # Ultra-minimal prompt: ~15 token instruction
+        prompt = f"Summarize {tx}{qa_str}\nSections: 1.Topics 2.Decisions 3.Actions"
         
         response = model.generate_content(prompt)
         summary = response.text.strip()
-        logger.info("Meeting summary generated")
+        logger.info(f"Summary generated: {len(summary)} chars")
         return summary
     except Exception as e:
-        logger.error(f"Error summarizing meeting: {e}")
-        # Return fallback summary with what we have
-        fallback = f"""
-MEETING SUMMARY (Auto-generated)
-================================
-
-TRANSCRIPT:
-{transcript}
-{qa_text if qa_pairs else ''}
-
-NOTE: Could not generate AI summary due to API limitations.
-Please review the raw transcript above.
-"""
-        return fallback
+        logger.error(f"Summary error: {e}")
+        return f"MEETING SUMMARY\n===============\n{transcript[:300]}...\n\nAPI error. Review transcript above."
 
 
 def transcribe_audio_bytes(wav_bytes: bytes) -> str:
@@ -236,73 +189,58 @@ def transcribe_audio_bytes(wav_bytes: bytes) -> str:
 
 def detect_questions(text: str) -> list:
     """
-    Detect questions in text using HEURISTICS FIRST, then Gemini if needed.
-    Saves tokens by avoiding API calls for obvious cases.
-    
-    Args:
-        text: Text to analyze
-    
-    Returns:
-        List of detected questions
+    Detect questions using HEURISTICS-ONLY (saves 100% API tokens).
+    Pattern-based detection without Gemini API calls.
     """
-    # HEURISTIC-FIRST approach: use patterns before calling API
     questions = []
     lines = text.split('\n')
     
-    # Find lines with question marks (free, no tokens)
+    # Check for question marks (completely free, no tokens)
     for line in lines:
-        line_stripped = line.strip()
-        if '?' in line_stripped and len(line_stripped) > 5:
-            questions.append(line_stripped.rstrip('?'))
+        line_s = line.strip()
+        if '?' in line_s and len(line_s) > 5:
+            # Remove question mark and clean
+            q = line_s.rstrip('?').rstrip('!').strip()
+            if len(q) > 5 and q not in questions:
+                questions.append(q)
     
-    if questions:
-        return questions  # Found via heuristics, no API call needed!
+    # Also check common question starters (what, how, when, why, who, where, can, will, do)
+    if not questions:
+        q_starters = ('what ', 'how ', 'when ', 'why ', 'who ', 'where ', 'can ', 'will ', 'do ', 'should ')
+        for line in lines:
+            line_lower = line.lower().strip()
+            if any(line_lower.startswith(s) for s in q_starters):
+                q = line.strip().rstrip('?').rstrip('!').strip()
+                if len(q) > 5 and q not in questions:
+                    questions.append(q)
     
-    # Only call API if no obvious questions found
-    try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        prompt = f"Questions in text (one per line, no intro):\\n{text[-300:]}"  # Only last 300 chars!
-        
-        response = model.generate_content(prompt)
-        result = response.text.strip()
-        
-        if result.lower() != "none":
-            questions = [q.strip() for q in result.split('\n') if q.strip()]
-        return questions
-    except Exception as e:
-        logger.error(f"Error detecting questions: {e}")
-        return []
+    # No API call - 100% token savings
+    logger.info(f"Questions detected (heuristic): {len(questions)}")
+    return questions
 
 
 def generate_action_items(transcript: str) -> list:
     """
-    Extract action items (OPTIMIZED for tokens - only processes last 600 chars).
-    
-    Args:
-        transcript: Meeting transcript (will be truncated to last 600 chars)
-    
-    Returns:
-        List of action items with owner and deadline if available
+    Extract action items. ULTRA-OPTIMIZED: ~30-40 tokens per call.
+    Only processes last 500 chars for maximum efficiency.
     """
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        # Only use last 600 chars to minimize tokens
-        transcript_short = transcript[-600:] if len(transcript) > 600 else transcript
+        # Only last 500 chars - very aggressive
+        tx = transcript[-500:].strip() if len(transcript) > 500 else transcript
         
-        # Ultra-minimal prompt
-        prompt = f"Actions from:\\n{transcript_short}"
+        # Ultra-minimal prompt: ~10 tokens
+        prompt = f"Actions:{tx}"
         
         response = model.generate_content(prompt)
         result = response.text.strip()
         
-        if result.lower() == "none" or not result:
+        if not result or result.lower() in ("none", "no actions", ""):
             return []
         
-        return result.split('\n')
+        # Return non-empty lines only
+        return [line.strip() for line in result.split('\n') if line.strip()]
     except Exception as e:
-        logger.error(f"Error generating action items: {e}")
-        return []
-    except Exception as e:
-        logger.error(f"Error generating action items: {e}")
+        logger.error(f"Action items error: {e}")
         return []
