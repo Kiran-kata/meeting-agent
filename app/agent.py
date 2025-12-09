@@ -39,6 +39,21 @@ class MeetingAgentCore:
         self.running = False
         self.screen_thread = None
 
+    # --- PDF Management ---
+
+    def add_pdf_file(self, pdf_path: str):
+        """
+        Add a PDF file to the index for use during meeting.
+        
+        Args:
+            pdf_path: Full path to the PDF file
+        """
+        success = self.pdf_index.add_pdf(pdf_path)
+        if success:
+            logger.info(f"PDF file loaded: {pdf_path}")
+        else:
+            logger.error(f"Failed to load PDF: {pdf_path}")
+
     # --- Start / stop ---
 
     def start(self):

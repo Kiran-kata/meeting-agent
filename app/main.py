@@ -54,6 +54,7 @@ def main():
     # Connect overlay signals to agent
     overlay.start_requested.connect(start_agent)
     overlay.stop_requested.connect(stop_agent)
+    overlay.pdf_selected.connect(agent.add_pdf_file)  # Connect PDF upload signal
 
     def on_about_to_quit():
         if agent.running:

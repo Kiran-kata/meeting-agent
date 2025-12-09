@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QTextEdit, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PyQt6.QtWidgets import QWidget, QTextEdit, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QFont
 
@@ -12,6 +12,7 @@ class Overlay(QWidget):
     close_requested = pyqtSignal()
     start_requested = pyqtSignal()
     stop_requested = pyqtSignal()
+    pdf_selected = pyqtSignal(str)  # Signal for PDF file selection
 
     def __init__(self):
         super().__init__()
@@ -22,7 +23,7 @@ class Overlay(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self.resize(480, 350)
+        self.resize(550, 380)
         self.move(20, 20)
         
         # For dragging
@@ -104,10 +105,37 @@ class Overlay(QWidget):
         """)
         main_layout.addWidget(self.text_box)
 
-        # Control buttons - Start/Stop
+        # Control buttons - Start/Stop + PDF Upload
         controls_layout = QHBoxLayout()
         controls_layout.setContentsMargins(16, 8, 16, 8)
         controls_layout.setSpacing(10)
+        
+        self.pdf_btn = QPushButton("📄 Add PDF")
+        self.pdf_btn.setFont(QFont("Segoe UI", 10))
+        self.pdf_btn.setFixedHeight(32)
+        self.pdf_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pdf_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(0, 122, 255, 0.8);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 122, 255, 1.0);
+            }
+            QPushButton:pressed {
+                background-color: rgba(0, 102, 220, 1.0);
+            }
+            QPushButton:disabled {
+                background-color: rgba(0, 122, 255, 0.4);
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
+        self.pdf_btn.clicked.connect(self.on_add_pdf)
+        controls_layout.addWidget(self.pdf_btn)
         
         self.start_btn = QPushButton("▶ Start")
         self.start_btn.setFont(QFont("Segoe UI", 10))
@@ -207,6 +235,7 @@ class Overlay(QWidget):
         self.is_running = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.pdf_btn.setEnabled(False)  # Disable PDF upload during recording
         self.status_dot.setStyleSheet("color: #34c759; font-size: 8px;")
         self.status_text.setText("Recording")
         self.status_text.setStyleSheet("color: #34c759;")
@@ -217,10 +246,27 @@ class Overlay(QWidget):
         self.is_running = False
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.pdf_btn.setEnabled(True)  # Re-enable PDF upload after recording
         self.status_dot.setStyleSheet("color: #8a8a8e; font-size: 8px;")
         self.status_text.setText("Stopped")
         self.status_text.setStyleSheet("color: #86868b;")
         self.stop_requested.emit()
+
+    def on_add_pdf(self):
+        """Handle PDF file selection"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select PDF File",
+            "",
+            "PDF Files (*.pdf);;All Files (*)"
+        )
+        if file_path:
+            self.pdf_selected.emit(file_path)
+            # Show confirmation message
+            pdf_name = file_path.split("\\")[-1]
+            self.text_box.insertPlainText(f"\n✓ PDF loaded: {pdf_name}\n")
+            # Auto-scroll to bottom
+            self.text_box.verticalScrollBar().setValue(self.text_box.verticalScrollBar().maximum())
 
     def mousePressEvent(self, event):
         """Handle mouse press for dragging"""
