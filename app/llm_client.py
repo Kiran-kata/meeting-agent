@@ -37,23 +37,24 @@ def ask_llm_with_context(
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        prompt = f"""You are a helpful meeting assistant. Answer questions based on the provided context.
-
-QUESTION:
-{question}
-
-CONTEXT:
-[Meeting Transcript]
-{transcript_context}
-
-[Screen Content]
-{screen_text}
-
-[PDF Documents]
-{pdf_context}
-
-Instructions: Answer only using the provided context. If you don't have enough information, say so clearly.
-Be concise and practical."""
+        # AGGRESSIVE truncation to minimize tokens
+        transcript_context = transcript_context[-500:] if transcript_context else ""
+        pdf_context = pdf_context[:200] if pdf_context else ""
+        screen_text = screen_text[:150] if screen_text else ""
+        
+        # Ultra-minimal prompt format - ~30 tokens vs 200+ before
+        context_parts = []
+        if transcript_context.strip():
+            context_parts.append(f"Recent: {transcript_context}")
+        if screen_text.strip():
+            context_parts.append(f"Screen: {screen_text}")
+        if pdf_context.strip():
+            context_parts.append(f"Docs: {pdf_context}")
+        
+        context_str = "\n".join(context_parts) if context_parts else "No context available"
+        
+        # Minimal prompt: uses ~5x fewer tokens
+        prompt = f"Q: {question}\n\nContext:\n{context_str}\n\nAnswer concisely."
         
         response = model.generate_content(prompt)
         answer = response.text.strip()
@@ -141,24 +142,21 @@ To troubleshoot:
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        qa_text = ""
-        if qa_pairs:
-            qa_text = "\n\nQUESTIONS & ANSWERS:\n"
-            for q, a in qa_pairs:
-                qa_text += f"\nQ: {q}\nA: {a}\n"
+        # AGGRESSIVE truncation: last 1200 chars only (~180 tokens)
+        transcript = transcript[-1200:] if len(transcript) > 1200 else transcript
         
-        prompt = f"""Please create a structured meeting summary with the following sections:
-
-1. **Main Topics** - What was discussed
-2. **Key Decisions** - What was decided
-3. **Action Items** - What needs to be done (who, what, when)
-4. **Risks/Concerns** - Any open issues or blockers
-
-TRANSCRIPT:
-{transcript}
-{qa_text}
-
-Format the summary clearly with headers and bullet points."""
+        # Only include top 3 Q&A pairs (vs all)
+        qa_text = ""
+        if qa_pairs and len(qa_pairs) > 0:
+            qa_text = "\n\nTop Q&A:"
+            for q, a in qa_pairs[:3]:
+                # Truncate each to 60 chars
+                q_short = q[:60].replace("\n", " ")
+                a_short = a[:60].replace("\n", " ")
+                qa_text += f"\nQ: {q_short}...\nA: {a_short}..."
+        
+        # MINIMAL prompt: 3 sections vs 4, no formatting instructions
+        prompt = f"""Summarize in 3 sections:\n1. Topics\n2. Decisions\n3. Actions\n\nTranscript:{transcript}{qa_text}"""
         
         response = model.generate_content(prompt)
         summary = response.text.strip()
@@ -238,7 +236,8 @@ def transcribe_audio_bytes(wav_bytes: bytes) -> str:
 
 def detect_questions(text: str) -> list:
     """
-    Detect questions in text using Gemini.
+    Detect questions in text using HEURISTICS FIRST, then Gemini if needed.
+    Saves tokens by avoiding API calls for obvious cases.
     
     Args:
         text: Text to analyze
@@ -246,22 +245,29 @@ def detect_questions(text: str) -> list:
     Returns:
         List of detected questions
     """
+    # HEURISTIC-FIRST approach: use patterns before calling API
+    questions = []
+    lines = text.split('\n')
+    
+    # Find lines with question marks (free, no tokens)
+    for line in lines:
+        line_stripped = line.strip()
+        if '?' in line_stripped and len(line_stripped) > 5:
+            questions.append(line_stripped.rstrip('?'))
+    
+    if questions:
+        return questions  # Found via heuristics, no API call needed!
+    
+    # Only call API if no obvious questions found
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
-        
-        prompt = f"""Extract all questions from this text. Return ONLY the questions, one per line.
-If there are no questions, return "None".
-
-TEXT:
-{text}"""
+        prompt = f"Questions in text (one per line, no intro):\\n{text[-300:]}"  # Only last 300 chars!
         
         response = model.generate_content(prompt)
         result = response.text.strip()
         
-        if result.lower() == "none":
-            return []
-        
-        questions = [q.strip() for q in result.split('\n') if q.strip()]
+        if result.lower() != "none":
+            questions = [q.strip() for q in result.split('\n') if q.strip()]
         return questions
     except Exception as e:
         logger.error(f"Error detecting questions: {e}")
@@ -270,10 +276,10 @@ TEXT:
 
 def generate_action_items(transcript: str) -> list:
     """
-    Extract action items from meeting transcript.
+    Extract action items (OPTIMIZED for tokens - only processes last 600 chars).
     
     Args:
-        transcript: Meeting transcript
+        transcript: Meeting transcript (will be truncated to last 600 chars)
     
     Returns:
         List of action items with owner and deadline if available
@@ -281,23 +287,22 @@ def generate_action_items(transcript: str) -> list:
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        prompt = f"""From this meeting transcript, extract action items in this format:
-- Action: [what needs to be done]
-  Owner: [who is responsible] (if mentioned)
-  Deadline: [when it needs to be done] (if mentioned)
-
-If there are no action items, return "None".
-
-TRANSCRIPT:
-{transcript}"""
+        # Only use last 600 chars to minimize tokens
+        transcript_short = transcript[-600:] if len(transcript) > 600 else transcript
+        
+        # Ultra-minimal prompt
+        prompt = f"Actions from:\\n{transcript_short}"
         
         response = model.generate_content(prompt)
         result = response.text.strip()
         
-        if result.lower() == "none":
+        if result.lower() == "none" or not result:
             return []
         
         return result.split('\n')
+    except Exception as e:
+        logger.error(f"Error generating action items: {e}")
+        return []
     except Exception as e:
         logger.error(f"Error generating action items: {e}")
         return []
