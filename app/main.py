@@ -27,7 +27,7 @@ def main():
     app = QApplication(sys.argv)
 
     overlay = Overlay()
-    overlay.show_message("Starting meeting agent...")
+    overlay.show_message("Meeting Agent\n\nClick Start to begin recording")
 
     agent = MeetingAgentCore(
         overlay_widget=overlay,
@@ -42,15 +42,22 @@ def main():
             "- Listening to meeting audio (for questions)\n"
             "- Listening to your mic (ignored for Q&A)\n"
             "- Scanning screen & PDFs\n"
-            "Close this window to stop and generate summary."
+            "Click Stop to end and generate summary."
         )
 
-    QTimer.singleShot(1500, start_agent)
+    def stop_agent():
+        agent.stop()
+        overlay.show_message("Meeting stopped.\nGenerating summary...")
+        summary_path = agent.generate_summary_and_save()
+        overlay.show_message(f"Summary saved:\n{summary_path}")
+
+    # Connect overlay signals to agent
+    overlay.start_requested.connect(start_agent)
+    overlay.stop_requested.connect(stop_agent)
 
     def on_about_to_quit():
-        agent.stop()
-        summary_path = agent.generate_summary_and_save()
-        print(f"Meeting summary saved to: {summary_path}")
+        if agent.running:
+            agent.stop()
 
     app.aboutToQuit.connect(on_about_to_quit)
 

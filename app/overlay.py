@@ -10,6 +10,8 @@ class Overlay(QWidget):
     """
     
     close_requested = pyqtSignal()
+    start_requested = pyqtSignal()
+    stop_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -20,11 +22,12 @@ class Overlay(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        self.resize(480, 300)
+        self.resize(480, 350)
         self.move(20, 20)
         
         # For dragging
         self.drag_position = QPoint()
+        self.is_running = False
 
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -101,18 +104,90 @@ class Overlay(QWidget):
         """)
         main_layout.addWidget(self.text_box)
 
+        # Control buttons - Start/Stop
+        controls_layout = QHBoxLayout()
+        controls_layout.setContentsMargins(16, 8, 16, 8)
+        controls_layout.setSpacing(10)
+        
+        self.start_btn = QPushButton("▶ Start")
+        self.start_btn.setFont(QFont("Segoe UI", 10))
+        self.start_btn.setFixedHeight(32)
+        self.start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(52, 199, 89, 0.8);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(52, 199, 89, 1.0);
+            }
+            QPushButton:pressed {
+                background-color: rgba(40, 170, 70, 1.0);
+            }
+            QPushButton:disabled {
+                background-color: rgba(52, 199, 89, 0.4);
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
+        self.start_btn.clicked.connect(self.on_start)
+        controls_layout.addWidget(self.start_btn)
+        
+        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn.setFont(QFont("Segoe UI", 10))
+        self.stop_btn.setFixedHeight(32)
+        self.stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 59, 48, 0.8);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+                padding: 0 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 59, 48, 1.0);
+            }
+            QPushButton:pressed {
+                background-color: rgba(220, 40, 30, 1.0);
+            }
+            QPushButton:disabled {
+                background-color: rgba(255, 59, 48, 0.4);
+                color: rgba(255, 255, 255, 0.5);
+            }
+        """)
+        self.stop_btn.clicked.connect(self.on_stop)
+        controls_layout.addWidget(self.stop_btn)
+        
+        controls_layout.addStretch()
+        
+        controls_bar = QWidget()
+        controls_bar.setLayout(controls_layout)
+        controls_bar.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                            stop:0 rgba(0, 0, 0, 160),
+                            stop:1 rgba(0, 0, 0, 180));
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        """)
+        main_layout.addWidget(controls_bar)
+
         # Status indicator at bottom
         status_layout = QHBoxLayout()
         status_layout.setContentsMargins(16, 8, 16, 8)
         
-        status_dot = QLabel("●")
-        status_dot.setStyleSheet("color: #34c759; font-size: 8px;")
-        status_layout.addWidget(status_dot)
+        self.status_dot = QLabel("●")
+        self.status_dot.setStyleSheet("color: #8a8a8e; font-size: 8px;")
+        status_layout.addWidget(self.status_dot)
         
-        status_text = QLabel("Active")
-        status_text.setFont(QFont("Segoe UI", 9))
-        status_text.setStyleSheet("color: #86868b;")
-        status_layout.addWidget(status_text)
+        self.status_text = QLabel("Stopped")
+        self.status_text.setFont(QFont("Segoe UI", 9))
+        self.status_text.setStyleSheet("color: #86868b;")
+        status_layout.addWidget(self.status_text)
         
         status_layout.addStretch()
         
@@ -126,6 +201,26 @@ class Overlay(QWidget):
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         """)
         main_layout.addWidget(status_bar)
+
+    def on_start(self):
+        """Handle start button click"""
+        self.is_running = True
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.status_dot.setStyleSheet("color: #34c759; font-size: 8px;")
+        self.status_text.setText("Recording")
+        self.status_text.setStyleSheet("color: #34c759;")
+        self.start_requested.emit()
+
+    def on_stop(self):
+        """Handle stop button click"""
+        self.is_running = False
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.status_dot.setStyleSheet("color: #8a8a8e; font-size: 8px;")
+        self.status_text.setText("Stopped")
+        self.status_text.setStyleSheet("color: #86868b;")
+        self.stop_requested.emit()
 
     def mousePressEvent(self, event):
         """Handle mouse press for dragging"""
