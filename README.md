@@ -264,7 +264,7 @@ Edit `app/config.py` to customize:
 SAMPLE_RATE = 16000         # Audio sample rate
 CHANNELS = 1                # Mono audio
 CHUNK_DURATION_SECONDS = 8  # Chunk size for transcription
-GEMINI_MODEL = "gemini-1.5-flash"  # Fast model for real-time use
+GEMINI_MODEL = "gemini-2.5-flash"  # Latest available model for real-time use
 ```
 
 ## Dependencies
@@ -290,6 +290,32 @@ GEMINI_MODEL = "gemini-1.5-flash"  # Fast model for real-time use
 4. **Save Summaries** - Meeting summaries are automatically saved for future reference
 5. **Device Testing** - Test your audio devices before important meetings
 6. **Free Tier Usage** - The free Gemini API is great for testing; upgrade for production
+
+## Testing
+
+Run the comprehensive test suite:
+
+```bash
+# Test all components (requires API key)
+python test_integration.py
+
+# Test individual components
+python test_full.py
+
+# Check available audio devices
+python check_devices.py
+
+# List available Gemini models
+python list_models.py
+```
+
+**Test Results:**
+- ✅ Core components load successfully
+- ✅ PDF indexing and search working
+- ✅ LLM Q&A with context awareness
+- ✅ Question detection (heuristic-based)
+- ✅ Meeting summary generation
+- ✅ All error handling and recovery
 
 ## License
 
