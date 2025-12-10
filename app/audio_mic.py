@@ -43,19 +43,40 @@ class MicAudioListener:
     def start(self):
         self.stop_flag = False
         try:
-            logger.info(f"[MIC] Starting audio listener on device {self.device}...")
+            # Validate device before attempting to open stream
+            device_to_use = self.device
+            
+            if device_to_use is not None:
+                try:
+                    devices = sd.query_devices()
+                    if isinstance(devices, dict):
+                        # Single device returned
+                        pass
+                    elif isinstance(devices, list) and device_to_use < len(devices):
+                        dev_info = devices[device_to_use]
+                        if dev_info['max_input_channels'] == 0:
+                            logger.warning(f"[MIC] Device {device_to_use} has no input channels, using default")
+                            device_to_use = None
+                    else:
+                        logger.warning(f"[MIC] Device {device_to_use} not found, using default")
+                        device_to_use = None
+                except Exception as dev_err:
+                    logger.warning(f"[MIC] Could not validate device: {dev_err}, using default")
+                    device_to_use = None
+            
+            logger.info(f"[MIC] Starting audio listener on device {device_to_use}...")
             self.stream = sd.InputStream(
                 samplerate=self.samplerate,
                 channels=self.channels,
                 callback=self._audio_callback,
-                device=self.device,
+                device=device_to_use,
             )
             self.stream.start()
-            logger.info(f"[MIC] Audio stream started successfully")
+            logger.info(f"[MIC] Audio stream started successfully on device {device_to_use}")
             self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
             self.worker_thread.start()
         except Exception as e:
-            logger.error(f"[MIC] Error starting audio stream: {e}")
+            logger.error(f"[MIC] Error starting audio stream: {e}", exc_info=True)
             raise
 
     def stop(self):

@@ -28,10 +28,10 @@ if not GEMINI_API_KEY or GEMINI_API_KEY.startswith("your-api"):
 TESSERACT_PATH = os.getenv("TESSERACT_PATH", "C:\\Program Files\\Tesseract-OCR\\tesseract.exe")
 
 # Gemini Model Configuration
-# Using gemini-1.5-flash (cheaper and faster than 2.0)
+# Using gemini-2.5-flash (latest available model)
 # Pricing: ~$0.075 per 1M input tokens (FREE tier: limited quota)
-GEMINI_MODEL = "gemini-1.5-flash"  # Cheaper model for text
-GEMINI_VISION_MODEL = "gemini-1.5-flash"  # For image/screen analysis
+GEMINI_MODEL = "gemini-2.5-flash"  # Latest available model
+GEMINI_VISION_MODEL = "gemini-2.5-flash"  # For image/screen analysis
 
 # Project Structure
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
