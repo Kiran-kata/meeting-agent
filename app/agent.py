@@ -57,16 +57,31 @@ class MeetingAgentCore:
     # --- Start / stop ---
 
     def start(self):
-        self.running = True
-        self.meeting_listener.start()
-        self.mic_listener.start()
-        self.screen_thread = threading.Thread(target=self._screen_loop, daemon=True)
-        self.screen_thread.start()
+        try:
+            self.running = True
+            logger.info("Starting meeting agent...")
+            self.meeting_listener.start()
+            logger.info("Meeting listener started")
+            self.mic_listener.start()
+            logger.info("Mic listener started")
+            self.screen_thread = threading.Thread(target=self._screen_loop, daemon=True)
+            self.screen_thread.start()
+            logger.info("Screen thread started - agent ready")
+        except Exception as e:
+            logger.error(f"Error starting agent: {e}", exc_info=True)
+            self.running = False
+            raise
 
     def stop(self):
-        self.running = False
-        self.meeting_listener.stop()
-        self.mic_listener.stop()
+        try:
+            self.running = False
+            if self.meeting_listener:
+                self.meeting_listener.stop()
+            if self.mic_listener:
+                self.mic_listener.stop()
+            logger.info("Agent stopped successfully")
+        except Exception as e:
+            logger.error(f"Error stopping agent: {e}", exc_info=True)
 
     # --- Screen polling ---
 

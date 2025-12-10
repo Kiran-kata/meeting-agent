@@ -76,14 +76,24 @@ class MicAudioListener:
                 elapsed = time.time() - last_flush
                 if elapsed >= SEGMENT_SECONDS:
                     if buffer:
-                        chunk = np.concatenate(buffer, axis=0)
-                        buffer = []
-                        last_flush = time.time()
-                        text = self._transcribe_chunk(chunk)
-                        if text and self.transcript_callback:
-                            self.transcript_callback(text)
+                        try:
+                            chunk = np.concatenate(buffer, axis=0)
+                            buffer = []
+                            last_flush = time.time()
+                            text = self._transcribe_chunk(chunk)
+                            if text and self.transcript_callback:
+                                try:
+                                    self.transcript_callback(text)
+                                except Exception as cb_err:
+                                    logger.error(f"[MIC] Callback error: {cb_err}", exc_info=True)
+                        except Exception as proc_err:
+                            logger.error(f"[MIC] Processing error: {proc_err}", exc_info=True)
+                            buffer = []
+                            last_flush = time.time()
             except queue.Empty:
                 continue
+            except Exception as e:
+                logger.error(f"[MIC] Error in worker loop: {e}", exc_info=True)
 
     def _transcribe_chunk(self, audio_np: np.ndarray) -> str:
         audio_np = (audio_np * 32767).astype(np.int16)

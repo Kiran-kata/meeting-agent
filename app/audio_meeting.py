@@ -80,19 +80,29 @@ class MeetingAudioListener:
                 elapsed = time.time() - last_flush
                 if elapsed >= SEGMENT_SECONDS:
                     if buffer:
-                        logger.info(f"[MEETING] Processing {audio_frames_received} audio frames")
-                        chunk = np.concatenate(buffer, axis=0)
-                        buffer = []
-                        audio_frames_received = 0
-                        last_flush = time.time()
-                        text = self._transcribe_chunk(chunk)
-                        if text and self.transcript_callback:
-                            logger.info(f"[MEETING] Transcribed: {text[:100]}...")
-                            self.transcript_callback(text)
+                        try:
+                            logger.info(f"[MEETING] Processing {audio_frames_received} audio frames")
+                            chunk = np.concatenate(buffer, axis=0)
+                            buffer = []
+                            audio_frames_received = 0
+                            last_flush = time.time()
+                            text = self._transcribe_chunk(chunk)
+                            if text and self.transcript_callback:
+                                logger.info(f"[MEETING] Transcribed: {text[:100]}...")
+                                try:
+                                    self.transcript_callback(text)
+                                except Exception as cb_err:
+                                    logger.error(f"[MEETING] Callback error: {cb_err}", exc_info=True)
+                        except Exception as proc_err:
+                            logger.error(f"[MEETING] Processing error: {proc_err}", exc_info=True)
+                            buffer = []  # Clear buffer to prevent accumulation
+                            audio_frames_received = 0
+                            last_flush = time.time()
             except queue.Empty:
                 continue
             except Exception as e:
-                logger.error(f"[MEETING] Error in worker loop: {e}")
+                logger.error(f"[MEETING] Error in worker loop: {e}", exc_info=True)
+                # Don't raise - keep the loop alive even if there's an error
 
     def _transcribe_chunk(self, audio_np: np.ndarray) -> str:
         # float32 -> int16 -> wav bytes
