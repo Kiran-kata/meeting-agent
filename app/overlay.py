@@ -13,6 +13,7 @@ class Overlay(QWidget):
     start_requested = pyqtSignal()
     stop_requested = pyqtSignal()
     pdf_selected = pyqtSignal(str)  # Signal for PDF file selection
+    message_to_display = pyqtSignal(str)  # Signal for thread-safe message display
 
     def __init__(self):
         super().__init__()
@@ -229,6 +230,9 @@ class Overlay(QWidget):
             border-top: 1px solid rgba(255, 255, 255, 0.1);
         """)
         main_layout.addWidget(status_bar)
+        
+        # Connect the message signal for thread-safe updates
+        self.message_to_display.connect(self._display_message)
 
     def on_start(self):
         """Handle start button click"""
@@ -281,6 +285,11 @@ class Overlay(QWidget):
             event.accept()
 
     def show_message(self, text: str):
+        """Thread-safe message display using signal"""
+        self.message_to_display.emit(text)
+    
+    def _display_message(self, text: str):
+        """Internal method to actually update the text box (runs in main thread)"""
         self.text_box.setPlainText(text)
         self.show()
 
