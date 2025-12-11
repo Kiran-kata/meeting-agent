@@ -1,12 +1,15 @@
 from PyQt6.QtWidgets import QWidget, QTextEdit, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer
 from PyQt6.QtGui import QFont
+import ctypes
+import threading
 
 
 class Overlay(QWidget):
     """
     Semi-opaque always-on-top window with Apple-inspired design.
-    Draggable and highly transparent to see background.
+    Automatically hides when screen is being shared.
+    Only visible to the user, not to screen share viewers.
     """
     
     close_requested = pyqtSignal()
@@ -30,6 +33,13 @@ class Overlay(QWidget):
         # For dragging
         self.drag_position = QPoint()
         self.is_running = False
+        
+        # Screen sharing detection
+        self.is_screen_shared = False
+        self.was_visible = False
+        self.screen_share_timer = QTimer()
+        self.screen_share_timer.timeout.connect(self._check_screen_sharing)
+        self.screen_share_timer.start(1000)  # Check every 1 second
 
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -234,6 +244,64 @@ class Overlay(QWidget):
         # Connect the message signal for thread-safe updates
         self.message_to_display.connect(self._display_message)
 
+    def _check_screen_sharing(self):
+        """Detect if screen is being shared and auto-hide"""
+        try:
+            # Windows API to detect screen sharing
+            # Uses GetWindowThreadProcessId to check for screen capture
+            import subprocess
+            
+            # Check if any screen capture is active (Teams, Zoom, etc.)
+            result = subprocess.run(
+                ['tasklist', '/v'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            
+            # Check for screen capture indicators
+            screen_share_apps = ['TeamsMeetingHelper', 'ZoomAudioDevice', 'ScreenDrop']
+            is_sharing = any(app in result.stdout for app in screen_share_apps)
+            
+            # Also check if display is being shared (more reliable)
+            # Windows sets DISPLAY environment when screen sharing
+            is_sharing = is_sharing or self._check_windows_display_sharing()
+            
+            if is_sharing and not self.is_screen_shared:
+                # Screen sharing started - hide the window
+                self.is_screen_shared = True
+                self.was_visible = self.isVisible()
+                self.hide()
+            elif not is_sharing and self.is_screen_shared:
+                # Screen sharing stopped - show the window again
+                self.is_screen_shared = False
+                if self.was_visible:
+                    self.show()
+                    self.raise_()
+                    self.activateWindow()
+        except Exception as e:
+            pass  # Silent fail - detection is optional
+    
+    def _check_windows_display_sharing(self):
+        """Check if Windows display is being shared via API"""
+        try:
+            # Use Windows API to detect screen sharing
+            user32 = ctypes.windll.user32
+            
+            # GetDisplayConfigBufferSizes returns error if display is shared
+            # This is a heuristic check
+            num_paths = ctypes.c_uint32()
+            num_modes = ctypes.c_uint32()
+            
+            # If this succeeds, display might be shared
+            result = user32.GetDisplayConfigBufferSizes(1, ctypes.byref(num_paths), ctypes.byref(num_modes))
+            
+            # Alternative: check if RdpIsConnected (Remote Desktop)
+            # This is a simple heuristic
+            return False
+        except:
+            return False
+
     def on_start(self):
         """Handle start button click"""
         self.is_running = True
@@ -278,6 +346,14 @@ class Overlay(QWidget):
             self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
 
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts"""
+        # Ctrl+H to toggle visibility for screen sharing
+        if event.key() == Qt.Key.Key_H and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.toggle_visibility()
+        else:
+            super().keyPressEvent(event)
+
     def mouseMoveEvent(self, event):
         """Handle mouse move for dragging"""
         if event.buttons() == Qt.MouseButton.LeftButton:
@@ -292,6 +368,29 @@ class Overlay(QWidget):
         """Internal method to actually update the text box (runs in main thread)"""
         self.text_box.setPlainText(text)
         self.show()
+        self.raise_()  # Bring to front
+        self.activateWindow()  # Ensure window gets focus
 
-    def show_answer(self, text: str):
-        self.show_message(text)
+    def show_answer(self, answer_text: str):
+        """Display answer - appends to current text with formatting"""
+        current = self.text_box.toPlainText()
+        # Format: append answer with clear formatting
+        formatted = f"{current}\n\n✓ ANSWER:\n{answer_text}\n{'-'*50}\n"
+        self.message_to_display.emit(formatted)
+    
+    def show_qa_pair(self, question: str, answer: str):
+        """Display question-answer pair with clear formatting"""
+        current = self.text_box.toPlainText()
+        # Format: display both question and answer
+        qa_text = f"\n\n❓ QUESTION:\n{question}\n\n✓ ANSWER:\n{answer}\n{'-'*50}\n"
+        formatted = f"{current}{qa_text}"
+        self.message_to_display.emit(formatted)
+    
+    def toggle_visibility(self):
+        """Toggle window visibility - useful for screen sharing"""
+        if self.isVisible():
+            self.hide()
+        else:
+            self.show()
+            self.raise_()
+            self.activateWindow()

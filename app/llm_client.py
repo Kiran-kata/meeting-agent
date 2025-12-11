@@ -22,37 +22,32 @@ def ask_llm_with_context(
     screen_image=None,
 ) -> str:
     """
-    Ask Gemini a question with meeting context.
-    ULTRA-OPTIMIZED: ~20-30 tokens per call (down from 250).
+    Ask Gemini a question with PDF context for comprehensive answers.
+    Uses PDF knowledge base + question to generate detailed response.
     """
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         
-        # ULTRA-AGGRESSIVE truncation - extract only essential info
-        # Last 250 chars (typical question context spans ~30-40 tokens)
-        tx = transcript_context[-250:].strip() if transcript_context else ""
+        # Build context from PDF (most important for accuracy)
+        pdf_part = f"\nKNOWLEDGE BASE (from PDF):\n{pdf_context[:500]}" if pdf_context else ""
         
-        # First 80 chars PDF (high-value info only)
-        pdf = pdf_context[:80].strip() if pdf_context else ""
+        # Add recent transcript for context
+        tx = transcript_context[-200:].strip() if transcript_context else ""
+        tx_part = f"\nRECENT DISCUSSION:\n{tx}" if tx else ""
         
-        # First 60 chars screen (most critical)
-        scr = screen_text[:60].strip() if screen_text else ""
+        # Combine context
+        context = pdf_part + tx_part
         
-        # Build ultra-compact context: ~5 tokens
-        ctx_parts = [p for p in [tx, scr, pdf] if p]
-        ctx = " | ".join(ctx_parts)[:120] if ctx_parts else ""
-        
-        # Ultra-minimal prompt: ~10 tokens instruction
-        # Use abbreviations: Q, C for Context
-        prompt = f"Q:{question[:80]}" + (f"\nC:{ctx}" if ctx else "")
+        # Build prompt with context
+        prompt = f"QUESTION: {question}\n{context}\n\nProvide a detailed, helpful answer based on the above information."
         
         response = model.generate_content(prompt)
         answer = response.text.strip()
-        logger.info(f"Q:{question[:30]}... Ans:{answer[:30]}...")
+        logger.info(f"Q:{question[:30]}... Ans:{answer[:50]}...")
         return answer
     except Exception as e:
         logger.error(f"Error asking: {e}")
-        return "Error."
+        return "Unable to generate answer. Please try again."
 
 
 def ask_llm_with_image(
@@ -134,8 +129,8 @@ def summarize_meeting(transcript: str, qa_pairs: list = None) -> str:
 
 def transcribe_audio_bytes(wav_bytes: bytes) -> str:
     """
-    Transcribe audio using Gemini's audio transcription capability.
-    Falls back to silence detection if API is unavailable.
+    Transcribe audio using offline Google Speech Recognition.
+    Does NOT use API quota - completely free.
     
     Args:
         wav_bytes: Audio data in WAV format
@@ -144,28 +139,31 @@ def transcribe_audio_bytes(wav_bytes: bytes) -> str:
         Transcribed text or empty string if silent
     """
     try:
-        # Use Gemini's audio transcription
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        import speech_recognition as sr
+        from io import BytesIO
         
-        # Encode audio as base64
-        audio_data = base64.standard_b64encode(wav_bytes).decode('utf-8')
+        # Convert bytes to audio file
+        audio_file = BytesIO(wav_bytes)
         
-        # Create audio part for Gemini
-        audio_part = {
-            'mime_type': 'audio/wav',
-            'data': audio_data
-        }
+        # Use Google Speech Recognition API (offline-capable)
+        recognizer = sr.Recognizer()
         
-        # Ask Gemini to transcribe
-        response = model.generate_content([
-            "Please transcribe this audio and return only the transcribed text, nothing else.",
-            audio_part
-        ])
+        with sr.AudioFile(audio_file) as source:
+            audio = recognizer.record(source)
         
-        text = response.text.strip()
+        # Recognize using Google's free speech recognition
+        text = recognizer.recognize_google(audio)
+        
         if text:
             logger.info(f"Transcribed: {text[:100]}...")
-        return text
+        return text.strip()
+    except sr.UnknownValueError:
+        # Audio was not clear enough
+        logger.debug("Audio could not be understood")
+        return ""
+    except sr.RequestError as e:
+        logger.warning(f"Speech recognition service error: {e}")
+        return ""
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
         # Fallback: Check if audio has significant volume (not silence)

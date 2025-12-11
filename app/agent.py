@@ -133,34 +133,48 @@ class MeetingAgentCore:
     def handle_question(self, question: str):
         """
         Called when someone else in the meeting asks a question.
+        This spawns a thread so answer generation doesn't block audio processing.
         """
-        with self.screen_lock:
-            screen_text = self.last_screen_text or ""
-            screen_img = self.last_screen_image
+        def answer_thread():
+            try:
+                with self.screen_lock:
+                    screen_text = self.last_screen_text or ""
+                    screen_img = self.last_screen_image
 
-        pdf_chunks = self.pdf_index.query(question, k=5)
-        pdf_context = "\n\n---\n\n".join(pdf_chunks) if pdf_chunks else ""
+                pdf_chunks = self.pdf_index.query(question, k=5)
+                pdf_context = "\n\n---\n\n".join(pdf_chunks) if pdf_chunks else ""
 
-        transcript_context = self.context.get_recent_transcript()
+                transcript_context = self.context.get_recent_transcript()
 
-        try:
-            answer = ask_llm_with_context(
-                question=question,
-                transcript_context=transcript_context,
-                screen_text=screen_text,
-                pdf_context=pdf_context,
-                screen_image=screen_img,
-            )
-            logger.info(f"Answer generated: {answer[:50]}...")
-            
-            # Narrate the answer (non-blocking, runs in background)
-            self.narrator.narrate(answer, blocking=False)
-        except Exception as e:
-            answer = f"Error while generating answer: {e}"
-            logger.error(f"Error handling question: {e}")
+                try:
+                    answer = ask_llm_with_context(
+                        question=question,
+                        transcript_context=transcript_context,
+                        screen_text=screen_text,
+                        pdf_context=pdf_context,
+                        screen_image=screen_img,
+                    )
+                    logger.info(f"Answer generated for question: {question[:50]}...")
+                    logger.info(f"Answer: {answer[:100]}...")
+                    
+                    # Display the answer on overlay (thread-safe via signal)
+                    # Pass question so it shows Q&A pair
+                    self.overlay.show_qa_pair(question, answer)
+                    
+                    # Narrate the answer (non-blocking, runs in background)
+                    self.narrator.narrate(answer, blocking=False)
+                except Exception as e:
+                    answer = f"Error while generating answer: {e}"
+                    logger.error(f"Error generating answer: {e}", exc_info=True)
+                    self.overlay.show_qa_pair(question, answer)
 
-        self.context.log_qa(question, answer)
-        self.overlay.show_answer(answer)
+                self.context.log_qa(question, answer)
+            except Exception as e:
+                logger.error(f"Error in answer_thread: {e}", exc_info=True)
+        
+        # Spawn thread so we don't block the audio listener
+        thread = threading.Thread(target=answer_thread, daemon=True)
+        thread.start()
 
     # --- Summary ---
 

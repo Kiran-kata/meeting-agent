@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Adjust these indices once after checking sounddevice.query_devices()
-MEETING_DEVICE_INDEX = 24  # Stereo Mix (Realtek HD Audio Stereo input) - captures system audio
+MEETING_DEVICE_INDEX = 0   # Microsoft Sound Mapper (default input device)
 MIC_DEVICE_INDEX = 2       # Microphone (OMEN Cam & Voice)
 
 
