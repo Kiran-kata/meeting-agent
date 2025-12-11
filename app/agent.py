@@ -14,6 +14,14 @@ from .llm_client import ask_llm_with_context, summarize_meeting
 from .streaming_llm import ask_llm_streaming
 from .screen_share_detector import HiddenOverlayManager
 from .narration import Narrator
+from .parakeet_features import (
+    ResumeProfile,
+    CodingInterviewDetector,
+    MultilingualSupport,
+    InterviewPerformanceAnalyzer,
+    QuestionAutoDetector,
+    StealthMode
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +43,14 @@ class MeetingAgentCore:
         # Advanced screen share hiding (Cluely AI style)
         self.screen_share_manager = HiddenOverlayManager(overlay_widget)
 
+        # Parakeet AI-inspired features
+        self.resume_profile = ResumeProfile()
+        self.coding_detector = CodingInterviewDetector()
+        self.multilingual = MultilingualSupport()
+        self.performance_analyzer = InterviewPerformanceAnalyzer()
+        self.question_detector = QuestionAutoDetector()
+        self.stealth_mode = StealthMode(overlay_widget)
+
         # Audio listeners
         self.meeting_listener = MeetingAudioListener(device=meeting_device_index)
         self.meeting_listener.transcript_callback = self.on_meeting_transcript
@@ -50,6 +66,7 @@ class MeetingAgentCore:
     def add_pdf_file(self, pdf_path: str):
         """
         Add a PDF file to the index for use during meeting.
+        Also tries to load it as a resume for profile context.
         
         Args:
             pdf_path: Full path to the PDF file
@@ -57,8 +74,30 @@ class MeetingAgentCore:
         success = self.pdf_index.add_pdf(pdf_path)
         if success:
             logger.info(f"PDF file loaded: {pdf_path}")
+            
+            # If no resume loaded yet, try this as resume
+            if not self.resume_profile.resume_text:
+                self.resume_profile.upload_resume(pdf_path)
         else:
             logger.error(f"Failed to load PDF: {pdf_path}")
+    
+    def set_interview_profile(self, name: str, email: str = "", role: str = ""):
+        """
+        Set up interview profile with personal information.
+        Parakeet AI feature: Profile-matched interview responses.
+        """
+        self.resume_profile.create_profile(name, email, role)
+        logger.info(f"Interview profile created: {name}")
+    
+    def upload_resume(self, pdf_path: str) -> bool:
+        """
+        Upload resume for experience-matched answers.
+        Parakeet AI feature: Context matching from resume.
+        """
+        success = self.resume_profile.upload_resume(pdf_path)
+        if success:
+            self.pdf_index.add_pdf(pdf_path)
+        return success
 
     # --- Start / stop ---
 
@@ -66,6 +105,10 @@ class MeetingAgentCore:
         try:
             self.running = True
             logger.info("Starting meeting agent...")
+            
+            # Start performance analysis
+            self.performance_analyzer.start_interview()
+            logger.info("Interview performance tracking started")
             
             # Start advanced screen share detection
             self.screen_share_manager.start()
@@ -149,16 +192,31 @@ class MeetingAgentCore:
     def handle_question(self, question: str):
         """
         Called when someone else in the meeting asks a question.
-        Uses streaming for real-time answer generation like Parquet.AI.
+        Uses streaming for real-time answer generation like Parakeet.AI.
+        Includes interview performance tracking and multilingual support.
         """
         def answer_thread():
             try:
+                # Categorize question (Parakeet AI feature)
+                question_category = self.question_detector.categorize_question(question)
+                logger.info(f"Question category: {question_category}")
+                
                 with self.screen_lock:
                     screen_text = self.last_screen_text or ""
                     screen_img = self.last_screen_image
 
+                # Check for coding interview (Parakeet AI feature)
+                coding_info = self.coding_detector.analyze_screen_content(screen_text, screen_img)
+                if coding_info["is_coding_interview"]:
+                    logger.info(f"Coding interview detected: {coding_info['platform']}")
+
                 pdf_chunks = self.pdf_index.query(question, k=5)
                 pdf_context = "\n\n---\n\n".join(pdf_chunks) if pdf_chunks else ""
+
+                # Add resume context for personalized answers (Parakeet AI feature)
+                resume_context = self.resume_profile.get_profile_context()
+                if resume_context:
+                    pdf_context = resume_context + "\n\n---\n\n" + pdf_context
 
                 transcript_context = self.context.get_recent_transcript()
 
@@ -169,6 +227,7 @@ class MeetingAgentCore:
                     
                     # Stream the answer in real-time
                     streaming_answer = ""
+                    answer_start_time = time.time()
                     
                     async def on_chunk(chunk: str):
                         """Called for each streaming chunk"""
@@ -192,7 +251,11 @@ class MeetingAgentCore:
                     finally:
                         loop.close()
                     
-                    logger.info(f"Streaming answer complete: {answer[:100]}...")
+                    answer_time = time.time() - answer_start_time
+                    logger.info(f"Streaming answer complete: {answer[:100]}... (took {answer_time:.1f}s)")
+                    
+                    # Track performance (Parakeet AI feature)
+                    self.performance_analyzer.add_qa_pair(question, answer, answer_time)
                     
                     # Narrate the complete answer (non-blocking, runs in background)
                     self.narrator.narrate(answer, blocking=False)
@@ -203,12 +266,7 @@ class MeetingAgentCore:
                     error_msg = f"Error while generating answer: {e}"
                     logger.error(f"Error generating answer: {e}", exc_info=True)
                     self.overlay.show_qa_pair(question, error_msg)
-                except Exception as e:
-                    answer = f"Error while generating answer: {e}"
-                    logger.error(f"Error generating answer: {e}", exc_info=True)
-                    self.overlay.show_qa_pair(question, answer)
-
-                self.context.log_qa(question, answer)
+                    
             except Exception as e:
                 logger.error(f"Error in answer_thread: {e}", exc_info=True)
         
@@ -219,16 +277,22 @@ class MeetingAgentCore:
     # --- Summary ---
 
     def generate_summary_and_save(self) -> str:
-        """Generate and save meeting summary"""
+        """
+        Generate comprehensive interview summary with performance analysis.
+        Parakeet AI feature: Post-interview insights and recommendations.
+        """
         full_transcript = self.context.get_full_transcript()
         qa_log = self.context.get_qa_log()
         
+        # Generate interview performance analysis (Parakeet AI feature)
+        analysis = self.performance_analyzer.end_interview()
+        
         # Check if we have any meaningful content
         if not full_transcript or not full_transcript.strip():
-            fallback_msg = """MEETING SUMMARY
+            fallback_msg = """INTERVIEW SUMMARY
 ================
 
-No audio was captured during this meeting.
+No audio was captured during this interview.
 
 Possible reasons:
 - Audio device not properly configured
@@ -237,7 +301,7 @@ Possible reasons:
 
 To troubleshoot:
 1. Run: python -c "import sounddevice as sd; print(sd.query_devices())"
-2. Check MEETING_DEVICE_INDEX in main.py (currently device 24)
+2. Check MEETING_DEVICE_INDEX in main.py (currently device 0)
 3. Verify Gemini API key is valid and has quota available
 4. Test audio devices separately using test_audio_devices.py
 """
@@ -248,7 +312,7 @@ To troubleshoot:
                 f.write(fallback_msg)
             
             # Narrate the summary info
-            narration_text = "No audio was captured during this meeting. Please check your audio device configuration."
+            narration_text = "No audio was captured during this interview. Please check your audio device configuration."
             self.narrator.narrate(narration_text, blocking=False)
             logger.warning("No transcript available for summary generation")
             return path
@@ -256,21 +320,44 @@ To troubleshoot:
         try:
             summary = summarize_meeting(full_transcript, qa_log)
             
+            # Append performance analysis to summary
+            summary_with_analysis = f"""{summary}
+
+PERFORMANCE ANALYSIS (Powered by Parakeet AI)
+==============================================
+
+Interview Duration: {analysis.get('interview_duration_minutes', 0)} minutes
+Total Questions: {analysis.get('total_questions', 0)}
+Average Answer Time: {analysis.get('average_answer_time_seconds', 0)} seconds
+Interview Efficiency: {analysis.get('interview_efficiency', 'N/A')}
+
+RECOMMENDATIONS FOR IMPROVEMENT:
+{chr(10).join('- ' + r for r in analysis.get('recommendations', []))}
+
+Summary Generated: {analysis.get('generated_at', 'Unknown')}
+"""
+            
             os.makedirs("meeting_summaries", exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             path = os.path.join("meeting_summaries", f"summary_{timestamp}.txt")
             with open(path, "w", encoding="utf-8") as f:
-                f.write(summary)
+                f.write(summary_with_analysis)
             
-            logger.info(f"Summary saved to {path}")
+            # Also save detailed analysis as JSON
+            self.performance_analyzer.save_analysis(analysis, f"analysis_{timestamp}.json")
+            
+            logger.info(f"Summary with analysis saved to {path}")
             
             # Narrate a brief summary completion message
-            self.narrator.narrate("Meeting summary generated successfully. Check the file for details.", blocking=False)
+            self.narrator.narrate(
+                f"Interview summary generated. {analysis.get('total_questions', 0)} questions answered in {analysis.get('interview_duration_minutes', 0):.1f} minutes.",
+                blocking=False
+            )
             
             return path
         except Exception as e:
             logger.error(f"Error generating summary: {e}")
-            fallback_msg = f"""MEETING SUMMARY - ERROR
+            fallback_msg = f"""INTERVIEW SUMMARY - ERROR
 =======================
 
 Could not generate AI-powered summary due to an error:
@@ -282,6 +369,11 @@ RAW TRANSCRIPT:
 Q&A LOG:
 {qa_log}
 
+PERFORMANCE METRICS:
+- Interview Duration: {analysis.get('interview_duration_minutes', 0)} minutes
+- Total Questions: {analysis.get('total_questions', 0)}
+- Average Answer Time: {analysis.get('average_answer_time_seconds', 0)} seconds
+
 Please try again later or check your API configuration.
 """
             os.makedirs("meeting_summaries", exist_ok=True)
@@ -292,4 +384,3 @@ Please try again later or check your API configuration.
             
             self.narrator.narrate("Could not generate summary. Check the file for details.", blocking=False)
             return path
-
