@@ -386,6 +386,24 @@ class Overlay(QWidget):
         formatted = f"{current}{qa_text}"
         self.message_to_display.emit(formatted)
     
+    def show_question(self, question: str):
+        """Display question immediately before answer generation"""
+        current = self.text_box.toPlainText()
+        q_text = f"\n\n❓ QUESTION:\n{question}\n\n⏳ GENERATING ANSWER...\n"
+        formatted = f"{current}{q_text}"
+        self.message_to_display.emit(formatted)
+    
+    def append_answer_chunk(self, chunk: str):
+        """Append streaming answer chunk (real-time display)"""
+        current = self.text_box.toPlainText()
+        # Remove the "GENERATING" line if present
+        if "⏳ GENERATING ANSWER..." in current:
+            current = current.replace("\n⏳ GENERATING ANSWER...\n", "\n\n✓ ANSWER:\n")
+        formatted = f"{current}{chunk}"
+        self.text_box.setPlainText(formatted)
+        # Auto-scroll to bottom
+        self.text_box.verticalScrollBar().setValue(self.text_box.verticalScrollBar().maximum())
+    
     def toggle_visibility(self):
         """Toggle window visibility - useful for screen sharing"""
         if self.isVisible():

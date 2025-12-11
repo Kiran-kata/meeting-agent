@@ -2,6 +2,7 @@ import os
 import time
 import threading
 import logging
+import asyncio
 
 from .pdf_index import PDFIndex
 from .screen_capture import capture_screen_image, capture_screen_text
@@ -10,6 +11,8 @@ from .audio_mic import MicAudioListener
 from .context_manager import ContextManager
 from .question_detector import is_question
 from .llm_client import ask_llm_with_context, summarize_meeting
+from .streaming_llm import ask_llm_streaming
+from .screen_share_detector import HiddenOverlayManager
 from .narration import Narrator
 
 logger = logging.getLogger(__name__)
@@ -28,6 +31,9 @@ class MeetingAgentCore:
 
         # Text-to-speech narrator
         self.narrator = Narrator()
+        
+        # Advanced screen share hiding (Cluely AI style)
+        self.screen_share_manager = HiddenOverlayManager(overlay_widget)
 
         # Audio listeners
         self.meeting_listener = MeetingAudioListener(device=meeting_device_index)
@@ -60,6 +66,11 @@ class MeetingAgentCore:
         try:
             self.running = True
             logger.info("Starting meeting agent...")
+            
+            # Start advanced screen share detection
+            self.screen_share_manager.start()
+            logger.info("Screen share detection started")
+            
             self.meeting_listener.start()
             logger.info("Meeting listener started")
             self.mic_listener.start()
@@ -75,6 +86,11 @@ class MeetingAgentCore:
     def stop(self):
         try:
             self.running = False
+            
+            # Stop screen share detection
+            self.screen_share_manager.stop()
+            logger.info("Screen share detection stopped")
+            
             if self.meeting_listener:
                 self.meeting_listener.stop()
             if self.mic_listener:
@@ -133,7 +149,7 @@ class MeetingAgentCore:
     def handle_question(self, question: str):
         """
         Called when someone else in the meeting asks a question.
-        This spawns a thread so answer generation doesn't block audio processing.
+        Uses streaming for real-time answer generation like Parquet.AI.
         """
         def answer_thread():
             try:
@@ -147,22 +163,46 @@ class MeetingAgentCore:
                 transcript_context = self.context.get_recent_transcript()
 
                 try:
-                    answer = ask_llm_with_context(
-                        question=question,
-                        transcript_context=transcript_context,
-                        screen_text=screen_text,
-                        pdf_context=pdf_context,
-                        screen_image=screen_img,
-                    )
-                    logger.info(f"Answer generated for question: {question[:50]}...")
-                    logger.info(f"Answer: {answer[:100]}...")
+                    # Display question immediately
+                    self.overlay.show_question(question)
+                    logger.info(f"Question detected: {question[:50]}...")
                     
-                    # Display the answer on overlay (thread-safe via signal)
-                    # Pass question so it shows Q&A pair
-                    self.overlay.show_qa_pair(question, answer)
+                    # Stream the answer in real-time
+                    streaming_answer = ""
                     
-                    # Narrate the answer (non-blocking, runs in background)
+                    async def on_chunk(chunk: str):
+                        """Called for each streaming chunk"""
+                        nonlocal streaming_answer
+                        streaming_answer += chunk
+                        # Update UI with partial answer
+                        self.overlay.append_answer_chunk(chunk)
+                    
+                    # Run async streaming in executor to avoid blocking
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        answer = loop.run_until_complete(
+                            ask_llm_streaming(
+                                question=question,
+                                pdf_context=pdf_context,
+                                transcript_context=transcript_context,
+                                callback=on_chunk,
+                            )
+                        )
+                    finally:
+                        loop.close()
+                    
+                    logger.info(f"Streaming answer complete: {answer[:100]}...")
+                    
+                    # Narrate the complete answer (non-blocking, runs in background)
                     self.narrator.narrate(answer, blocking=False)
+                    
+                    self.context.log_qa(question, answer)
+                    
+                except Exception as e:
+                    error_msg = f"Error while generating answer: {e}"
+                    logger.error(f"Error generating answer: {e}", exc_info=True)
+                    self.overlay.show_qa_pair(question, error_msg)
                 except Exception as e:
                     answer = f"Error while generating answer: {e}"
                     logger.error(f"Error generating answer: {e}", exc_info=True)

@@ -13,3 +13,18 @@ requests
 pydub
 pyttsx3
 scipy
+# Real-time streaming & WebSocket
+websockets>=11.0
+aiohttp>=3.9.0
+# Fast transcription
+faster-whisper>=0.10.0
+# Real-time LLM streaming
+openai>=1.3.0
+# Vector database for context management
+pinecone-client>=3.0.0
+# Async support
+asyncio>=3.4.3
+# Screen share detection
+pygetwindow>=0.0.9
+# Advanced cryptography for secure communication
+cryptography>=41.0.0
