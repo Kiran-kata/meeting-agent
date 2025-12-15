@@ -1,59 +1,7 @@
-# Virtual Environment
-.venv/
-venv/
-env/
-ENV/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Environment
 .env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-*.sublime-project
-*.sublime-workspace
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project
-logs/
+.venv/
+__pycache__/
+*.pyc
 *.log
-data/*.pdf
-meeting_summaries/
-models/
-
-# Temporary
-*.tmp
-*.temp
-*.bak
-*.backup
-*.old
+sessions/
+*.pdf

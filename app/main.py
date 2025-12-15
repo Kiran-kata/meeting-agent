@@ -29,7 +29,7 @@ def main():
         app = QApplication(sys.argv)
 
         overlay = Overlay()
-        overlay.show_message("Meeting Agent\n\nClick Start to begin recording")
+        overlay.show_message("Upload your resume PDF, then click Start")
 
         agent = MeetingAgentCore(
             overlay_widget=overlay,
@@ -41,43 +41,35 @@ def main():
             try:
                 logger.info("User clicked Start button")
                 agent.start()
-                overlay.show_message(
-                    "Meeting agent running.\n\n"
-                    "- Listening to meeting audio (for questions)\n"
-                    "- Listening to your mic (ignored for Q&A)\n"
-                    "- Scanning screen & PDFs\n"
-                    "Click Stop to end and generate summary."
-                )
+                # Clear the text box - agent will show Q&A as they happen
+                overlay.text_box.clear()
             except Exception as e:
                 logger.error(f"Error starting agent: {e}", exc_info=True)
                 overlay.show_message(f"Error starting: {str(e)}\n\nCheck logs for details.")
 
-        def stop_agent():
-            try:
-                logger.info("User clicked Stop button")
-                agent.stop()
-                overlay.show_message("Meeting stopped.\nGenerating summary...")
-                summary_path = agent.generate_summary_and_save()
-                overlay.show_message(f"Summary saved:\n{summary_path}")
-            except Exception as e:
-                logger.error(f"Error stopping agent: {e}", exc_info=True)
-                overlay.show_message(f"Error stopping: {str(e)}\n\nCheck logs for details.")
-
         # Connect overlay signals to agent
         overlay.start_requested.connect(start_agent)
-        overlay.stop_requested.connect(stop_agent)
         overlay.pdf_selected.connect(agent.add_pdf_file)  # Connect PDF upload signal
 
         def on_about_to_quit():
+            """Auto-save summary silently when closing the app."""
             try:
                 if agent.running:
+                    logger.info("App closing - auto-saving summary...")
                     agent.stop()
+                    # Generate and save summary silently (no voice, no UI message)
+                    summary_path = agent.generate_summary_and_save(silent=True)
+                    logger.info(f"Summary auto-saved to: {summary_path}")
             except Exception as e:
                 logger.error(f"Error during quit: {e}", exc_info=True)
 
         app.aboutToQuit.connect(on_about_to_quit)
 
         overlay.show()
+        
+        # Start screen detection 1 second after event loop starts
+        QTimer.singleShot(1000, overlay.start_screen_detection)
+        
         sys.exit(app.exec())
     
     except Exception as e:
